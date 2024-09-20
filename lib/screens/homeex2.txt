@@ -1,0 +1,289 @@
+import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'profile.dart'; // Import file profile.dart
+
+class HomePage extends StatefulWidget {
+  @override
+  _HomePageState createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  List<Map<String, dynamic>> mangaList = [];
+  int offset = 0; // Tambahkan variabel offset
+  TextEditingController searchController = TextEditingController();
+  int _currentIndex = 0; // Variabel untuk mengelola indeks tab aktif
+
+  @override
+  void initState() {
+    super.initState();
+    fetchData();
+  }
+
+  Future<void> fetchData({int limit = 5}) async {
+    final response = await http.get(Uri.parse(
+        'https://api.mangadex.org/manga?offset=$offset&limit=$limit'));
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      final List<dynamic> mangaData = data['data'] != null ? data['data'] : [];
+
+      setState(() {
+        mangaList.addAll(List<Map<String, dynamic>>.from(mangaData));
+        offset += limit; // Tambahkan offset untuk permintaan selanjutnya
+      });
+    } else {
+      print('Failed to load manga: ${response.statusCode}');
+      throw Exception('Failed to load manga');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchCoverArtDetails(String coverArtId) async {
+    final response = await http.get(
+      Uri.parse('https://api.mangadex.org/cover/$coverArtId'),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body)['data'];
+    } else {
+      throw Exception('Failed to load cover art details');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchMangaDetails(String mangaId) async {
+    final response = await http.get(
+      Uri.parse('https://api.mangadex.org/manga/$mangaId'),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body)['data'];
+    } else {
+      throw Exception('Failed to load manga details');
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchCoverArt(String coverArtId) async {
+    final response =
+        await http.get(Uri.parse('https://api.mangadex.org/cover/$coverArtId'));
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> data = json.decode(response.body);
+      return data;
+    } else {
+      throw Exception('Failed to load cover art');
+    }
+  }
+
+  void clearSearch() {
+    setState(() {
+      searchController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Manga List'),
+      ),
+      body: mangaList.isEmpty
+          ? Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: mangaList.length,
+              itemBuilder: (context, index) {
+                final mangaAttributes = mangaList[index]['attributes'];
+                final mangaTitle = mangaAttributes['title']['en'] ?? 'No Title';
+                final coverArtRelationships =
+                    mangaList[index]['relationships'] as List<dynamic>;
+
+                String coverArtId = '';
+                for (final relationship in coverArtRelationships) {
+                  if (relationship['type'] == 'cover_art') {
+                    coverArtId = relationship['id'];
+                    break;
+                  }
+                }
+
+                return FutureBuilder(
+                  future: fetchCoverArt(coverArtId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Card(
+                        child: ListTile(
+                          title: Text('Loading...'),
+                        ),
+                      );
+                    } else if (snapshot.hasError) {
+                      return Card(
+                        child: ListTile(
+                          title: Text('Error loading data'),
+                        ),
+                      );
+                    } else {
+                      final Map<String, dynamic>? coverArtData =
+                          snapshot.data as Map<String, dynamic>?;
+
+                      final List<dynamic>? relationships =
+                          (coverArtData?['relationships'] as List<dynamic>?);
+                      final String mangaId =
+                          (relationships != null && relationships.isNotEmpty)
+                              ? relationships[0]['id']
+                              : 'defaultMangaId';
+
+                      return Card(
+                        child: ListTile(
+                          title: Column(
+                            children: [
+                              FutureBuilder(
+                                future: fetchCoverArt(coverArtId),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return CircularProgressIndicator();
+                                  } else if (snapshot.hasError) {
+                                    return Container(
+                                      width: 150, // Adjust the size as needed
+                                      height: 200,
+                                      color: Colors.grey, // Placeholder color
+                                      child: Center(
+                                        child: Icon(Icons.error),
+                                      ),
+                                    );
+                                  } else {
+                                    final Map<String, dynamic>? coverArtData =
+                                        snapshot.data as Map<String, dynamic>?;
+
+                                    // Check if coverArtData and its attributes are not null
+                                    if (coverArtData != null &&
+                                        coverArtData['attributes'] != null &&
+                                        coverArtData['attributes']
+                                                ['fileName'] !=
+                                            null) {
+                                      final List<dynamic>? relationships =
+                                          (coverArtData['relationships']
+                                              as List<dynamic>?);
+                                      final String mangaId =
+                                          (relationships != null &&
+                                                  relationships.isNotEmpty)
+                                              ? relationships[0]['id']
+                                              : 'defaultMangaId';
+
+                                      final String fileName =
+                                          coverArtData['attributes']
+                                              ['fileName'];
+
+                                      final imageUrl =
+                                          'https://mangadex.org/covers/$mangaId/$fileName';
+
+                                      return Image.network(
+                                        imageUrl,
+                                        errorBuilder:
+                                            (context, error, stackTrace) {
+                                          return Container(
+                                            width:
+                                                100, // Adjust the size as needed
+                                            height: 100,
+                                            color: Colors
+                                                .grey, // Placeholder color
+                                            child: Center(
+                                              child: Icon(Icons.error),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    } else {
+                                      return Container(
+                                        width: 100, // Adjust the size as needed
+                                        height: 100,
+                                        color: Colors.grey, // Placeholder color
+                                        child: Center(
+                                          child: Icon(Icons.error),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                              Text(mangaTitle),
+                            ],
+                          ),
+                          onTap: () {
+                            // Navigate to manga details page with the fetched mangaId
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => MangaDetailsPage(mangaId),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }
+                  },
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          fetchData(); // Pemanggilan fetchData untuk memuat lebih banyak data
+        },
+        child: ClipOval(
+          child: Container(
+            color: Colors.blue, // Ganti warna sesuai keinginan
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Load More',
+                style: TextStyle(fontSize: 12), // Sesuaikan ukuran teks
+              ),
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+            if (_currentIndex == 1) {
+              // Pindah ke halaman profil jika tab profil di-klik
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfilePage()),
+              );
+            }
+          });
+        },
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MangaDetailsPage extends StatelessWidget {
+  final String mangaId;
+
+  MangaDetailsPage(this.mangaId);
+
+  @override
+  Widget build(BuildContext context) {
+    // Implement your manga details page here
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Manga Details'),
+      ),
+      body: Center(
+        child: Text('Manga ID: $mangaId'),
+      ),
+    );
+  }
+}

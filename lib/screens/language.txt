@@ -1,0 +1,72 @@
+// language.dart
+
+import 'package:flutter/material.dart';
+import 'read.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class LanguagePage extends StatelessWidget {
+  final String chapterTitle;
+  final List<String> chapterIds;
+
+  LanguagePage({required this.chapterTitle, required this.chapterIds});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Languages for $chapterTitle'),
+      ),
+      body: ListView.builder(
+        itemCount: chapterIds.length,
+        itemBuilder: (context, index) {
+          return Card(
+            child: ListTile(
+              title: Text(chapterTitle),
+              subtitle: Text('ID: ${chapterIds[index]}'),
+              onTap: () async {
+                final chapterId = chapterIds[index];
+                final apiUrl =
+                    'https://api.mangadex.org/at-home/server/$chapterId';
+
+                final response = await http.get(Uri.parse(apiUrl));
+
+                if (response.statusCode == 200) {
+                  final Map<String, dynamic> chapterData =
+                      json.decode(response.body);
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReadPage(
+                        baseUrl: chapterData['baseUrl'],
+                        chapterHash: chapterData['chapter']['hash'],
+                        chapterData:
+                            List<String>.from(chapterData['chapter']['data']),
+                      ),
+                    ),
+                  );
+                } else {
+                  // Handle error when fetching chapter data
+                  print('Failed to load chapter data');
+                }
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchChapterData(String chapterId) async {
+    final response = await http.get(
+      Uri.parse('https://api.mangadex.org/at-home/server/$chapterId'),
+    );
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load chapter data');
+    }
+  }
+}
