@@ -68,10 +68,7 @@ Make sure you have an Android emulator running or an Android device connected vi
 lib/
 │
 ├── main.dart            # App entry point
-├── models/              # Data models for manga
 ├── screens/             # Different screens for the UI
-├── widgets/             # Reusable components/widgets
-└── services/            # API handling and other services
 ```
 
 
